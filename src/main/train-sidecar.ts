@@ -9,6 +9,7 @@ import { parseSidecarLine, type SidecarMessage } from '@shared/sidecar-protocol'
 export class TrainSidecarManager extends EventEmitter {
   private proc: ChildProcessWithoutNullStreams | null = null
   private buf = ''
+  private stopRequested = false
 
   get running(): boolean {
     return this.proc !== null
@@ -16,6 +17,7 @@ export class TrainSidecarManager extends EventEmitter {
 
   start(cudaFraction = '0.35'): void {
     if (this.running) return
+    this.stopRequested = false
     const script = this.resolveScript()
     if (!script) {
       this.emit('message', {
@@ -38,9 +40,19 @@ export class TrainSidecarManager extends EventEmitter {
     })
     this.proc.stdout.on('data', (c: Buffer) => this.onStdout(c.toString('utf8')))
     this.proc.stderr.on('data', (c: Buffer) => console.error('[train]', c.toString('utf8')))
-    this.proc.on('exit', () => {
+    this.proc.on('error', (err) => {
+      this.emit('message', {
+        type: 'error',
+        code: 'TRAIN_INIT',
+        details: err.message,
+        protocolVersion: 2
+      } as SidecarMessage)
+    })
+    this.proc.on('exit', (code, signal) => {
+      const expected = this.stopRequested
+      this.stopRequested = false
       this.proc = null
-      this.emit('exit')
+      this.emit('exit', { expected, code, signal })
     })
   }
 
@@ -59,6 +71,7 @@ export class TrainSidecarManager extends EventEmitter {
   }
 
   stop(): void {
+    this.stopRequested = true
     if (this.proc) {
       this.proc.kill()
       this.proc = null

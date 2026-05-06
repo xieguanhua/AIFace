@@ -11,6 +11,7 @@ export class SidecarManager extends EventEmitter {
   private mockTimer: ReturnType<typeof setInterval> | null = null
   private buf = ''
   private mockFrameId = 0
+  private stopRequested = false
 
   get running(): boolean {
     return this.proc !== null || this.mockTimer !== null
@@ -18,6 +19,7 @@ export class SidecarManager extends EventEmitter {
 
   start(): void {
     if (this.running) return
+    this.stopRequested = false
     const bufferPath = ensureFrameBuffer()
     const script = this.resolveScript()
     if (script) {
@@ -34,9 +36,11 @@ export class SidecarManager extends EventEmitter {
       })
       this.proc.stdout.on('data', (c: Buffer) => this.onStdout(c.toString('utf8')))
       this.proc.stderr.on('data', (c: Buffer) => console.error('[sidecar]', c.toString('utf8')))
-      this.proc.on('exit', () => {
+      this.proc.on('exit', (code, signal) => {
+        const expected = this.stopRequested
+        this.stopRequested = false
         this.proc = null
-        this.emit('exit')
+        this.emit('exit', { expected, code, signal })
       })
       return
     }
@@ -97,6 +101,7 @@ export class SidecarManager extends EventEmitter {
   }
 
   stop(): void {
+    this.stopRequested = true
     if (this.mockTimer) {
       clearInterval(this.mockTimer)
       this.mockTimer = null

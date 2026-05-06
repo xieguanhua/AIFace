@@ -6,6 +6,8 @@ export const useModelStore = defineStore('model', () => {
   const isModelLoading = ref(false)
   const activeModelId = ref<string | null>(null)
   const stagingModelId = ref<string | null>(null)
+  const selectedModelId = ref<string | null>(null)
+  const installedModelIds = ref<string[]>([])
   const warmupDone = ref(false)
   const preloadPending = ref(false)
   const swapPending = ref(false)
@@ -32,6 +34,26 @@ export const useModelStore = defineStore('model', () => {
         isModelLoading.value = swapPending.value || warmupPending.value
       }, 3000)
     }
+  }
+
+  async function refreshInstalledModels(): Promise<void> {
+    const r = (await window.aiface.invoke(IPC_CHANNELS.LIST_INSTALLED_MODELS)) as {
+      ok?: boolean
+      files?: string[]
+    }
+    if (!r?.ok) {
+      installedModelIds.value = []
+      selectedModelId.value = null
+      return
+    }
+    const files = Array.isArray(r.files) ? r.files.map((x) => String(x)) : []
+    installedModelIds.value = files
+    if (selectedModelId.value && files.includes(selectedModelId.value)) return
+    selectedModelId.value = files[0] ?? null
+  }
+
+  function setSelectedModel(modelId: string | null): void {
+    selectedModelId.value = modelId
   }
 
   async function swapModel(modelId: string): Promise<void> {
@@ -102,12 +124,16 @@ export const useModelStore = defineStore('model', () => {
     isModelLoading,
     activeModelId,
     stagingModelId,
+    selectedModelId,
+    installedModelIds,
     warmupDone,
     preloadPending,
     swapPending,
     warmupPending,
     lastCommandError,
     preloadModel,
+    refreshInstalledModels,
+    setSelectedModel,
     swapModel,
     requestWarmup,
     simulateCudaOom,

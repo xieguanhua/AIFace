@@ -21,6 +21,7 @@ npm run build
 
 - 质量检查：`npm run quality:check`
 - 产物冒烟：`npm run release:smoke`
+- `quality:check` 包含：TypeScript 类型检查、中英文 i18n 键一致性、错误码映射覆盖、`train_worker.py` 与 `mock_sidecar.py` 命令链路冒烟校验。
 
 发布前建议回归：
 

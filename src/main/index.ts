@@ -1,8 +1,10 @@
 import { app, BrowserWindow, ipcMain, session, shell } from 'electron'
 import { join } from 'node:path'
+import { cpus, totalmem, freemem } from 'node:os'
+import { spawn } from 'node:child_process'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
 import type { SidecarMessage, SidecarFrameReady, SidecarError } from '@shared/sidecar-protocol'
-import { SIDECAR_ERROR_CODES } from '@shared/sidecar-protocol'
+import { SIDECAR_ERROR_CODES, TRAIN_ERROR_CODES } from '@shared/sidecar-protocol'
 import { SidecarManager } from './sidecar'
 import { TrainSidecarManager } from './train-sidecar'
 import { registerModelDownloadIpc, registerTrtBuildIpc } from './model-download'
@@ -134,6 +136,81 @@ function logSidecarEvent(event: string, payload?: Record<string, unknown>): void
   console.info(`[sidecar-event] ${event}${body}`)
 }
 
+type NvidiaSummary = {
+  gpuName: string | null
+  vramTotalMb: number | null
+  vramUsedMb: number | null
+}
+
+function queryNvidiaSummary(): Promise<NvidiaSummary> {
+  return new Promise((resolve) => {
+    const args = [
+      '--query-gpu=name,memory.total,memory.used',
+      '--format=csv,noheader,nounits'
+    ]
+    const p = spawn('nvidia-smi', args, { windowsHide: true })
+    let out = ''
+    let done = false
+    const finish = (result: NvidiaSummary): void => {
+      if (done) return
+      done = true
+      resolve(result)
+    }
+    const timer = setTimeout(() => {
+      p.kill()
+      finish({ gpuName: null, vramTotalMb: null, vramUsedMb: null })
+    }, 1500)
+    p.stdout.on('data', (c: Buffer) => {
+      out += c.toString('utf8')
+    })
+    p.on('error', () => {
+      clearTimeout(timer)
+      finish({ gpuName: null, vramTotalMb: null, vramUsedMb: null })
+    })
+    p.on('close', (code) => {
+      clearTimeout(timer)
+      if (code !== 0) {
+        finish({ gpuName: null, vramTotalMb: null, vramUsedMb: null })
+        return
+      }
+      const first = out.trim().split(/\r?\n/)[0] ?? ''
+      const parts = first.split(',').map((x) => x.trim())
+      if (parts.length < 3) {
+        finish({ gpuName: null, vramTotalMb: null, vramUsedMb: null })
+        return
+      }
+      const total = Number(parts[1])
+      const used = Number(parts[2])
+      finish({
+        gpuName: parts[0] || null,
+        vramTotalMb: Number.isFinite(total) ? total : null,
+        vramUsedMb: Number.isFinite(used) ? used : null
+      })
+    })
+  })
+}
+
+async function getHardwareSummary(): Promise<Record<string, unknown>> {
+  const nvidia = await queryNvidiaSummary()
+  const memTotal = Math.round(totalmem() / (1024 * 1024))
+  const memFree = Math.round(freemem() / (1024 * 1024))
+  const cpuModel = cpus()?.[0]?.model ?? 'unknown'
+  return {
+    platform: process.platform,
+    arch: process.arch,
+    electron: process.versions.electron,
+    node: process.versions.node,
+    cpuModel,
+    cpuCores: cpus().length,
+    ramTotalMb: memTotal,
+    ramFreeMb: memFree,
+    gpuName: nvidia.gpuName,
+    vramTotalMb: nvidia.vramTotalMb,
+    vramUsedMb: nvidia.vramUsedMb,
+    note: nvidia.gpuName ? 'nvidia-smi' : 'gpu probe unavailable'
+  }
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -189,12 +266,7 @@ if (!gotLock) {
       locale: app.getLocale()
     }))
 
-    ipcMain.handle(IPC_CHANNELS.GET_HARDWARE_SUMMARY, async () => ({
-      platform: process.platform,
-      arch: process.arch,
-      vramTotalMb: null as number | null,
-      note: 'Replace with nvidia-smi / Sidecar probe'
-    }))
+    ipcMain.handle(IPC_CHANNELS.GET_HARDWARE_SUMMARY, async () => getHardwareSummary())
 
     ipcMain.handle(IPC_CHANNELS.SIDECAR_START, async () => {
       logSidecarEvent('start')
@@ -292,9 +364,16 @@ if (!gotLock) {
     registerModelVaultIpc(getMainWindow)
 
     sidecar.on('message', (msg: SidecarMessage) => dispatchSidecarMessage(msg))
-    sidecar.on('exit', () => {
-      logSidecarEvent('exit')
-      broadcastSidecar({ type: 'error', code: 'SIDECAR_EXIT', protocolVersion: 1 })
+    sidecar.on('exit', (info?: { expected?: boolean; code?: number | null; signal?: string | null }) => {
+      const expected = !!info?.expected
+      logSidecarEvent('exit', { expected, code: info?.code ?? null, signal: info?.signal ?? null })
+      if (expected) return
+      broadcastSidecar({
+        type: 'error',
+        code: SIDECAR_ERROR_CODES.SIDECAR_EXIT,
+        details: `code=${String(info?.code ?? 'null')} signal=${String(info?.signal ?? 'null')}`,
+        protocolVersion: 2
+      })
     })
 
     train.on('message', (msg: SidecarMessage) => {
@@ -320,8 +399,10 @@ if (!gotLock) {
       }
       mainWindow?.webContents.send('aiface:train-message', msg)
     })
-    train.on('exit', () => {
-      logTrainEvent('worker_exit')
+    train.on('exit', (info?: { expected?: boolean; code?: number | null; signal?: string | null }) => {
+      const expected = !!info?.expected
+      logTrainEvent('worker_exit', { expected, code: info?.code ?? null, signal: info?.signal ?? null })
+      if (expected) return
       mainWindow?.webContents.send('aiface:train-message', {
         type: 'train_status',
         state: 'stopped',
@@ -330,7 +411,8 @@ if (!gotLock) {
       })
       mainWindow?.webContents.send('aiface:train-message', {
         type: 'error',
-        code: 'TRAIN_EXIT',
+        code: TRAIN_ERROR_CODES.TRAIN_EXIT,
+        details: `code=${String(info?.code ?? 'null')} signal=${String(info?.signal ?? 'null')}`,
         protocolVersion: 2
       })
     })

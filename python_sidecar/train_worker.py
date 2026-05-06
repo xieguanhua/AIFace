@@ -32,6 +32,9 @@ def try_limit_cuda_fraction() -> None:
                 }
             )
             return
+    except ModuleNotFoundError:
+        # torch is optional in dev/CI environments; fallback to cpu_only mode.
+        pass
     except Exception as e:
         emit({"type": "error", "code": "TRAIN_INIT", "details": str(e), "protocolVersion": 2})
         return

@@ -13,7 +13,10 @@ import sys
 import threading
 import time
 
-import numpy as np
+try:
+    import numpy as np
+except ModuleNotFoundError:
+    np = None  # type: ignore[assignment]
 
 from ring_layout import (
     RING_MAGIC,
@@ -24,7 +27,10 @@ from ring_layout import (
     slot_base,
     write_ring_header,
 )
-from vision_post import postprocess_preview
+try:
+    from vision_post import postprocess_preview
+except ModuleNotFoundError:
+    postprocess_preview = None  # type: ignore[assignment]
 
 
 def emit(obj: dict) -> None:
@@ -48,20 +54,27 @@ def open_ring(path: str) -> tuple[mmap.mmap, object]:
 def write_frame_to_slot(
     mm: mmap.mmap,
     slot: int,
-    rgba: np.ndarray,
+    rgba: object,
     frame_id: int,
     write_seq: int,
+    w: int,
+    h: int,
 ) -> int:
-    h, w, _c = rgba.shape
-    if rgba.shape[2] != 4:
-        raise ValueError("RGBA only")
-    byte_len = w * h * 4
+    if np is not None and hasattr(rgba, "shape"):
+        arr = rgba  # type: ignore[assignment]
+        if arr.shape[2] != 4:
+            raise ValueError("RGBA only")
+        flat = arr.astype(np.uint8, copy=False).tobytes()
+    else:
+        flat = bytes(rgba)
+    byte_len = len(flat)
+    if byte_len != w * h * 4:
+        raise ValueError("invalid frame byte length")
     if byte_len > RING_MAX_RGBA_BYTES:
         raise ValueError("frame too large")
     base = slot_base(slot)
     meta_off = base
     pix_off = base + RING_SLOT_META_BYTES
-    flat = rgba.astype(np.uint8, copy=False).tobytes()
     mm[meta_off : meta_off + RING_SLOT_META_BYTES] = b"\x00" * RING_SLOT_META_BYTES
     mm[meta_off + 0 : meta_off + 4] = w.to_bytes(4, "little")
     mm[meta_off + 4 : meta_off + 8] = h.to_bytes(4, "little")
@@ -76,14 +89,27 @@ def write_frame_to_slot(
     return byte_len
 
 
-def build_gradient_rgba(w: int, h: int, frame_id: int) -> np.ndarray:
-    x = (np.arange(w, dtype=np.uint32) + frame_id) % 256
-    y = (np.arange(h, dtype=np.uint32) + frame_id * 2) % 256
-    r = np.broadcast_to(x, (h, w)).astype(np.float32)
-    g = np.broadcast_to(y[:, None], (h, w)).astype(np.float32)
-    b = np.full((h, w), 128.0, dtype=np.float32)
-    a = np.full((h, w), 255.0, dtype=np.float32)
-    return np.stack([r, g, b, a], axis=-1).astype(np.uint8)
+def build_gradient_rgba(w: int, h: int, frame_id: int) -> object:
+    if np is not None:
+        x = (np.arange(w, dtype=np.uint32) + frame_id) % 256
+        y = (np.arange(h, dtype=np.uint32) + frame_id * 2) % 256
+        r = np.broadcast_to(x, (h, w)).astype(np.float32)
+        g = np.broadcast_to(y[:, None], (h, w)).astype(np.float32)
+        b = np.full((h, w), 128.0, dtype=np.float32)
+        a = np.full((h, w), 255.0, dtype=np.float32)
+        return np.stack([r, g, b, a], axis=-1).astype(np.uint8)
+    data = bytearray(w * h * 4)
+    idx = 0
+    for yy in range(h):
+        g = (yy + frame_id * 2) % 256
+        for xx in range(w):
+            r = (xx + frame_id) % 256
+            data[idx + 0] = r
+            data[idx + 1] = g
+            data[idx + 2] = 128
+            data[idx + 3] = 255
+            idx += 4
+    return bytes(data)
 
 
 def metrics_loop(stop: threading.Event, state: dict) -> None:
@@ -111,13 +137,14 @@ def frame_loop(stop: threading.Event, mm: mmap.mmap | None, path: str, state: di
             try:
                 slot = (frame_id - 1) % RING_SLOT_COUNT
                 rgba = build_gradient_rgba(w, h, frame_id)
-                rgba = postprocess_preview(
-                    rgba,
-                    float(state.get("grain", 0.0)),
-                    float(state.get("motion_blur", 0.0)),
-                    frame_id,
-                )
-                bl = write_frame_to_slot(mm, slot, rgba, frame_id, frame_id)
+                if np is not None and postprocess_preview is not None and hasattr(rgba, "shape"):
+                    rgba = postprocess_preview(
+                        rgba,
+                        float(state.get("grain", 0.0)),
+                        float(state.get("motion_blur", 0.0)),
+                        frame_id,
+                    )
+                bl = write_frame_to_slot(mm, slot, rgba, frame_id, frame_id, w, h)
                 emit(
                     {
                         "type": "frame_ready",
@@ -200,7 +227,13 @@ def main() -> None:
         {
             "type": "ready",
             "protocolVersion": 2,
-            "capabilities": ["mock_py", "frame_ring", "vision_post", "commands"],
+            "capabilities": [
+                "mock_py",
+                "frame_ring",
+                "commands",
+                "vision_post" if postprocess_preview is not None else "vision_post_disabled",
+                "numpy" if np is not None else "numpy_fallback",
+            ],
             "frameBufferPath": path or None,
         }
     )

@@ -11,7 +11,7 @@
     "build:dir": "npx electron-vite build && electron-builder --dir",
     "preview": "npx electron-vite preview",
     "typecheck": "vue-tsc --noEmit -p tsconfig.web.json",
-    "quality:check": "npm run typecheck",
+    "quality:check": "npm run typecheck && node ./scripts/quality-check.mjs && node ./scripts/train-worker-smoke.mjs && node ./scripts/sidecar-worker-smoke.mjs",
     "release:smoke": "npm run quality:check && npm run build:dir"
   },
   "dependencies": {

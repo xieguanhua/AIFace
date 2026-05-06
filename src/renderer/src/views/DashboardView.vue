@@ -3,7 +3,26 @@
     <a-space direction="vertical" style="width: 100%">
       <a-typography-paragraph>{{ t('dashboard.placeholder') }}</a-typography-paragraph>
       <a-button type="primary" :loading="loading" @click="refresh">{{ t('dashboard.hardware') }}</a-button>
-      <pre v-if="hw.summary" class="json">{{ JSON.stringify(hw.summary, null, 2) }}</pre>
+      <a-descriptions v-if="hw.summary" bordered size="small" :column="1">
+        <a-descriptions-item :label="t('dashboard.platform')">
+          {{ String(hw.summary.platform ?? '—') }}
+        </a-descriptions-item>
+        <a-descriptions-item :label="t('dashboard.cpu')">
+          {{ String(hw.summary.cpuModel ?? '—') }} ({{ String(hw.summary.cpuCores ?? '—') }} cores)
+        </a-descriptions-item>
+        <a-descriptions-item :label="t('dashboard.ram')">
+          {{ String(hw.summary.ramFreeMb ?? '—') }} / {{ String(hw.summary.ramTotalMb ?? '—') }} MB
+        </a-descriptions-item>
+        <a-descriptions-item :label="t('dashboard.gpu')">
+          {{ String(hw.summary.gpuName ?? '—') }}
+        </a-descriptions-item>
+        <a-descriptions-item :label="t('dashboard.vram')">
+          {{ String(hw.summary.vramUsedMb ?? '—') }} / {{ String(hw.summary.vramTotalMb ?? '—') }} MB
+        </a-descriptions-item>
+        <a-descriptions-item :label="t('dashboard.runtime')">
+          Electron {{ String(hw.summary.electron ?? '—') }}, Node {{ String(hw.summary.node ?? '—') }}
+        </a-descriptions-item>
+      </a-descriptions>
     </a-space>
   </a-card>
 </template>
@@ -31,13 +50,4 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
-.json {
-  background: #111;
-  color: #e6e6e6;
-  padding: 12px;
-  border-radius: 8px;
-  overflow: auto;
-  max-height: 320px;
-}
-</style>
+<style scoped></style>

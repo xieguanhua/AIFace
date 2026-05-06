@@ -4,6 +4,7 @@ import { IPC_CHANNELS } from '@shared/ipc-channels'
 import { db, type TrainRunStatus } from '@renderer/db'
 import { mapErrorMessage } from '@renderer/utils/error-message'
 import { message } from 'ant-design-vue'
+import { translate } from '@renderer/i18n/instance'
 
 export const useTrainStore = defineStore('train', () => {
   const lossPoints = ref<{ step: number; value: number }[]>([])
@@ -11,6 +12,8 @@ export const useTrainStore = defineStore('train', () => {
   const trainStatus = ref<TrainRunStatus>('stopped')
   const autoLoopRunning = ref(false)
   const autoLoopIntervalMs = ref(300)
+  const maxTrainSteps = ref(200)
+  const trainingFaceCount = ref(0)
   const currentRunId = ref<string | null>(null)
   const currentStep = ref(0)
   const lastLoss = ref<number | null>(null)
@@ -23,6 +26,17 @@ export const useTrainStore = defineStore('train', () => {
       updatedAt: number
     }[]
   >([])
+  const selectedRunDetail = ref<{
+    id: string
+    status: TrainRunStatus
+    step: number
+    targetSteps?: number
+    lastLoss?: number
+    cudaFraction: string
+    note?: string
+    createdAt: number
+    updatedAt: number
+  } | null>(null)
   let autoLoopTimer: ReturnType<typeof setTimeout> | null = null
 
   interface IpcResult {
@@ -45,6 +59,41 @@ export const useTrainStore = defineStore('train', () => {
     }))
   }
 
+  async function loadRunDetail(id: string): Promise<void> {
+    const row = await db.table_train_runs.get(id)
+    if (!row) {
+      selectedRunDetail.value = null
+      return
+    }
+    selectedRunDetail.value = {
+      id: row.id,
+      status: row.status,
+      step: row.step,
+      targetSteps: row.targetSteps,
+      lastLoss: row.lastLoss,
+      cudaFraction: row.cudaFraction,
+      note: row.note,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt
+    }
+  }
+
+  function clearRunDetail(): void {
+    selectedRunDetail.value = null
+  }
+
+  async function refreshTrainingFaceCount(): Promise<void> {
+    const rows = await db.table_face_metadata.toArray()
+    trainingFaceCount.value = rows.filter((x) => !!x.inTraining).length
+  }
+
+  async function ensureTrainingFacesSelected(): Promise<boolean> {
+    await refreshTrainingFaceCount()
+    if (trainingFaceCount.value > 0) return true
+    message.warning(translate('train.noTrainingFaces'))
+    return false
+  }
+
   async function ensureRun(status: TrainRunStatus, cudaFraction = '0.35', note?: string): Promise<string> {
     const now = Date.now()
     const id = currentRunId.value ?? makeRunId()
@@ -53,6 +102,7 @@ export const useTrainStore = defineStore('train', () => {
       id,
       status,
       step: currentStep.value,
+      targetSteps: maxTrainSteps.value,
       lastLoss: lastLoss.value ?? undefined,
       cudaFraction,
       note,
@@ -68,6 +118,7 @@ export const useTrainStore = defineStore('train', () => {
     await db.table_train_runs.update(currentRunId.value, {
       status,
       step: currentStep.value,
+      targetSteps: maxTrainSteps.value,
       lastLoss: lastLoss.value ?? undefined,
       note,
       updatedAt: Date.now()
@@ -80,6 +131,7 @@ export const useTrainStore = defineStore('train', () => {
     currentStep.value = step
     lastLoss.value = value
     void patchRun(trainStatus.value)
+    maybeFinishByTargetSteps()
   }
 
   function seedMock(): void {
@@ -92,6 +144,11 @@ export const useTrainStore = defineStore('train', () => {
   }
 
   async function startTrain(cudaFraction = '0.35'): Promise<void> {
+    if (!(await ensureTrainingFacesSelected())) return
+    currentRunId.value = null
+    currentStep.value = 0
+    lastLoss.value = null
+    lossPoints.value = []
     trainStatus.value = 'starting'
     await ensureRun('starting', cudaFraction)
     const result = (await window.aiface.invoke(IPC_CHANNELS.TRAIN_SIDECAR_START, cudaFraction)) as IpcResult
@@ -140,6 +197,21 @@ export const useTrainStore = defineStore('train', () => {
     autoLoopIntervalMs.value = Math.max(100, Math.min(5000, Math.round(n)))
   }
 
+  function setMaxTrainSteps(steps: number): void {
+    const n = Number(steps)
+    if (!Number.isFinite(n)) return
+    maxTrainSteps.value = Math.max(1, Math.min(100000, Math.round(n)))
+  }
+
+  function maybeFinishByTargetSteps(): void {
+    if (trainStatus.value !== 'running') return
+    if (currentStep.value < maxTrainSteps.value) return
+    stopAutoLoop()
+    trainStatus.value = 'done'
+    trainRunning.value = false
+    void patchRun('done', `target_steps_reached:${maxTrainSteps.value}`)
+  }
+
   function scheduleAutoLoopTick(): void {
     clearAutoLoopTimer()
     if (!autoLoopRunning.value) return
@@ -152,6 +224,10 @@ export const useTrainStore = defineStore('train', () => {
     if (!autoLoopRunning.value) return
     if (!trainRunning.value || trainStatus.value !== 'running') {
       scheduleAutoLoopTick()
+      return
+    }
+    if (currentStep.value >= maxTrainSteps.value) {
+      maybeFinishByTargetSteps()
       return
     }
     await sendTrainStep().catch(() => undefined)
@@ -207,6 +283,7 @@ export const useTrainStore = defineStore('train', () => {
 
   async function bootstrap(): Promise<void> {
     await refreshRecentRuns()
+    await refreshTrainingFaceCount()
   }
 
   return {
@@ -215,9 +292,12 @@ export const useTrainStore = defineStore('train', () => {
     trainStatus,
     autoLoopRunning,
     autoLoopIntervalMs,
+    maxTrainSteps,
+    trainingFaceCount,
     currentStep,
     lastLoss,
     recentRuns,
+    selectedRunDetail,
     pushLoss,
     seedMock,
     startTrain,
@@ -228,6 +308,10 @@ export const useTrainStore = defineStore('train', () => {
     startAutoLoop,
     stopAutoLoop,
     setAutoLoopInterval,
+    setMaxTrainSteps,
+    refreshTrainingFaceCount,
+    loadRunDetail,
+    clearRunDetail,
     setTrainRunning,
     setTrainStatus,
     bootstrap

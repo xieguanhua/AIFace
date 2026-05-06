@@ -32,6 +32,7 @@ export interface TrainRunRow {
   id: string
   status: TrainRunStatus
   step: number
+  targetSteps?: number
   lastLoss?: number
   cudaFraction: string
   note?: string

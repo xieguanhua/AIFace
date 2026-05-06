@@ -88,20 +88,41 @@
             </a-descriptions>
           </div>
           <a-divider orientation="left">{{ t('live.modelSection') }}</a-divider>
+          <a-alert
+            v-if="!hasInstalledModels"
+            type="warning"
+            show-icon
+            :message="t('live.noInstalledModels')"
+            :description="t('live.noInstalledModelsHint')"
+          />
+          <a-button v-if="!hasInstalledModels" size="small" @click="goModelVault">
+            {{ t('live.goModelVault') }}
+          </a-button>
+          <a-select
+            :value="model.selectedModelId"
+            style="width: 100%"
+            :placeholder="t('live.selectModel')"
+            :disabled="!hasInstalledModels"
+            @update:value="onSelectModel"
+          >
+            <a-select-option v-for="id in model.installedModelIds" :key="id" :value="id">
+              {{ id }}
+            </a-select-option>
+          </a-select>
           <a-space wrap>
             <a-button
               size="small"
               :loading="model.isModelLoading"
-              :disabled="model.preloadPending || model.swapPending"
-              @click="model.preloadModel('demo-a')"
+              :disabled="!model.selectedModelId || model.preloadPending || model.swapPending"
+              @click="onPreloadSelected"
             >
-              {{ t('live.preload') }} demo-a
+              {{ t('live.preload') }}
             </a-button>
             <a-button
               size="small"
               :loading="model.swapPending"
               :disabled="!model.stagingModelId || model.preloadPending || model.swapPending"
-              @click="model.swapModel('demo-a')"
+              @click="onSwapSelected"
             >
               {{ t('live.swapModel') }}
             </a-button>
@@ -132,6 +153,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import type { PreviewEdge } from '@renderer/stores/live'
 import { useLiveStore } from '@renderer/stores/live'
@@ -140,6 +162,7 @@ import { useModelStore } from '@renderer/stores/model'
 import { useSettingsStore } from '@renderer/stores/settings'
 
 const { t } = useI18n()
+const router = useRouter()
 const isDev = import.meta.env.DEV
 
 const videoRef = ref<HTMLVideoElement | null>(null)
@@ -153,6 +176,7 @@ const live = useLiveStore()
 const sidecar = useSidecarStore()
 const model = useModelStore()
 const settings = useSettingsStore()
+const hasInstalledModels = computed(() => model.installedModelIds.length > 0)
 
 const vramText = computed(() => {
   const m = sidecar.lastMetrics
@@ -168,6 +192,25 @@ function fmt(n: number | undefined): string {
 
 function onPreviewEdge(v: number): void {
   live.$patch({ previewMaxEdge: v as PreviewEdge })
+}
+
+function onSelectModel(v: string): void {
+  model.setSelectedModel(v || null)
+}
+
+async function onPreloadSelected(): Promise<void> {
+  if (!model.selectedModelId) return
+  await model.preloadModel(model.selectedModelId)
+}
+
+async function onSwapSelected(): Promise<void> {
+  const id = model.selectedModelId ?? model.stagingModelId
+  if (!id) return
+  await model.swapModel(id)
+}
+
+function goModelVault(): void {
+  void router.push('/assets/models')
 }
 
 function scheduleParamSync(): void {
@@ -227,6 +270,7 @@ async function stopEngine(): Promise<void> {
 }
 
 onMounted(() => {
+  void model.refreshInstalledModels()
   void nextTick(() => {
     const c = canvasRef.value
     if (c && typeof c.transferControlToOffscreen === 'function') {
