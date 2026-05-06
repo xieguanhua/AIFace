@@ -5,6 +5,8 @@ const CODE_TO_I18N_KEY: Record<string, string> = {
   SIDECAR_EXIT: 'errors.sidecarExit',
   INVALID_IPC_ARGS: 'errors.invalidIpcArgs',
   INVALID_COMMAND_JSON: 'errors.invalidCommandJson',
+  INVALID_TRAIN_COMMAND: 'errors.invalidTrainCommand',
+  MODEL_LOAD_TIMEOUT: 'errors.modelLoadTimeout',
   TRAIN_SCRIPT_MISSING: 'errors.trainScriptMissing',
   TRAIN_INIT: 'errors.trainInit',
   TRAIN_EXIT: 'errors.trainExit',

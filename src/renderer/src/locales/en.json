@@ -189,6 +189,8 @@
     "cudaOomLimit": "Too many OOMs — lower resolution or disable effects manually.",
     "invalidIpcArgs": "Invalid request arguments",
     "invalidCommandJson": "Invalid command format",
+    "invalidTrainCommand": "Invalid train command",
+    "modelLoadTimeout": "Model load timeout",
     "trainScriptMissing": "Training script is missing",
     "trainInit": "Training initialization failed",
     "trainExit": "Training process exited",

@@ -189,6 +189,8 @@
     "cudaOomLimit": "OOM 过于频繁，请手动降低分辨率或关闭特效。",
     "invalidIpcArgs": "请求参数不合法",
     "invalidCommandJson": "命令格式不正确",
+    "invalidTrainCommand": "训练命令不合法",
+    "modelLoadTimeout": "模型加载超时",
     "trainScriptMissing": "训练脚本缺失",
     "trainInit": "训练初始化失败",
     "trainExit": "训练进程已退出",
