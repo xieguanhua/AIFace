@@ -1,0 +1,65 @@
+{
+  "name": "aiface",
+  "version": "0.1.0",
+  "author": "",
+  "description": "AIFace — Live workbench, training lab, assets (Electron + Vue 3)",
+  "type": "module",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "npx electron-vite dev",
+    "build": "npx electron-vite build && electron-builder",
+    "build:dir": "npx electron-vite build && electron-builder --dir",
+    "preview": "npx electron-vite preview",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.web.json",
+    "quality:check": "npm run typecheck",
+    "release:smoke": "npm run quality:check && npm run build:dir"
+  },
+  "dependencies": {
+    "@ant-design/icons-vue": "^7.0.1",
+    "ant-design-vue": "^4.2.6",
+    "dayjs": "^1.11.13",
+    "dexie": "^4.0.10",
+    "echarts": "^5.6.0",
+    "pinia": "^2.3.1",
+    "vue": "^3.5.13",
+    "vue-echarts": "^7.0.3",
+    "vue-i18n": "^9.14.2",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "@types/node": "^24.0.0",
+    "electron": "^33.3.1",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "typescript": "~5.6.3",
+    "vite": "^5.4.11",
+    "vue-tsc": "^2.1.10"
+  },
+  "build": {
+    "appId": "com.aiface.app",
+    "productName": "AIFace",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "resources",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "python_sidecar",
+        "to": "python_sidecar",
+        "filter": ["**/*"]
+      }
+    ],
+    "win": {
+      "target": ["nsis"]
+    }
+  }
+}

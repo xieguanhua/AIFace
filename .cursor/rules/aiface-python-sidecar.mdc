@@ -1,0 +1,14 @@
+---
+description: Python Sidecar（NDJSON、错误码、与 Node 边界）
+globs: "**/*.py"
+alwaysApply: false
+---
+
+# Python Sidecar
+
+- **stdout**：仅输出 **NDJSON**（一行一个 JSON），每条必须含 `type`；调试日志走 **stderr** 或文件，禁止污染 stdout。
+- **版本**：目标 **Python 3.10**；依赖与 CUDA/TensorRT 矩阵在打包文档中锁定。
+- **协议**：与 `src/shared/sidecar-protocol.ts` 及 Skill `aiface-sidecar-protocol` 保持一致；扩展字段时增加 `protocolVersion`。
+- **错误**：输出 `{ "type": "error", "code": "SNAKE_CASE", "details": "..." }`；`code` 供前端 i18n 映射，勿依赖英文 `message` 做分支。
+- **stdin**：接收主进程写入的命令行（JSON per line）；长耗时任务应能响应退出信号。
+- **入口**：`python_sidecar/mock_sidecar.py` 为示例；真实引擎可替换为 FaceFusion/RVC 调度脚本，仍保持同一 stdout 契约。

@@ -1,0 +1,16 @@
+---
+description: Vue 渲染进程（组件、Pinia、Dexie、路由、ECharts）
+globs: "**/renderer/**/*.{vue,ts,tsx}"
+alwaysApply: false
+---
+
+# 渲染进程（Vue）
+
+- 使用 **`<script setup lang="ts">`** + Composition API；可复用逻辑放 `composables/`。
+- **Pinia**：按域拆分（`hardware`、`live`、`sidecar`、`train`、`settings`），避免单文件过大。
+- **Dexie**：`src/renderer/src/db/index.ts`；迁移升级时考虑 UI 提示（升级中/失败）。
+- **路由**：Hash history；布局在 `layouts/AppLayout.vue`，子页在 `views/`。
+- **Ant Design**：优先组件库；表单与表格保持 **英文长文案** 下的宽度与省略（`ellipsis` + Tooltip）。
+- **性能**：素材列表用 **虚拟列表**；对 Sidecar / IPC 的连续参数变更 **防抖或节流**（约 100–300ms）。
+- **i18n**：通过 `useI18n()`；需在无组件上下文处翻译时用 `@renderer/i18n/instance` 的 `translate`（谨慎，优先组件内 `t`）。
+- **ECharts**：`TrainView` 已用 `vue-echarts`；新图表注意在 `locale` 变化时更新 `option`（`computed` 依赖 `t` 或 step）。

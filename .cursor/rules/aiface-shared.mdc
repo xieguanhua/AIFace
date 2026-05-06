@@ -1,0 +1,13 @@
+---
+description: 主进程/渲染进程共享的 IPC 与 Sidecar 协议类型（src/shared）
+globs: "**/shared/**/*.ts"
+alwaysApply: false
+---
+
+# src/shared
+
+- **`ipc-channels.ts`**：IPC 通道名字符串的**唯一来源**；禁止在渲染/主进程中手写魔法字符串。
+- **`sidecar-protocol.ts`**：`parseSidecarLine`、消息类型与 `protocolVersion`；扩展消息时先改类型再实现解析与 UI。
+- **`window-api.d.ts`**：`window.aiface` 类型；preload 暴露的 API 变更时必须同步此文件。
+
+新增共享类型时保持 **零 Vue / 零 DOM 依赖**，便于主进程与渲染同时 import。

@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "models": [
+    {
+      "id": "bundled-face-demo",
+      "name": "基础换脸模型（演示）",
+      "kind": "face",
+      "relativePath": "bundled/face/README.txt",
+      "bundled": true,
+      "sizeBytes": 1024
+    },
+    {
+      "id": "bundled-voice-demo",
+      "name": "基础变声模型（演示）",
+      "kind": "voice",
+      "relativePath": "bundled/voice/README.txt",
+      "bundled": true,
+      "sizeBytes": 1024
+    }
+  ]
+}
+

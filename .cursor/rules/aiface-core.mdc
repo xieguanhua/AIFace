@@ -1,0 +1,33 @@
+---
+description: AIFace 全局技术栈、改动范围、安全与文案红线（始终应用）
+alwaysApply: true
+---
+
+# AIFace 核心约定
+
+## 技术栈
+
+- **桌面**：Electron + **electron-vite**；`src/main`（主进程）、`src/preload`（预加载）、`src/renderer`（Vue 3）。
+- **渲染**：Vue 3、Vue Router（Hash）、Pinia、**ant-design-vue 4**、ECharts / vue-echarts、**vue-i18n**、**Dexie**、**Day.js**（与 AntD 语言同步）。
+- **引擎**：Python 3.10 Sidecar（FaceFusion / RVC / TensorRT 规划），经 **stdout NDJSON** 与 Node 通信；仓库含 `python_sidecar/mock_sidecar.py` 与 Node 内 mock 回退。
+
+## 改动原则
+
+- 只改当前任务相关文件；禁止无请求的「顺手重构」、大范围格式化、擅自新增产品文档。
+- 新增依赖需有明确理由；优先使用仓库已有模式。
+
+## 安全红线
+
+- `contextIsolation: true`，`nodeIntegration: false`（渲染进程）；仅 **preload + contextBridge** 暴露 API。
+- IPC：`ipcMain.handle` 必须 **校验入参**（类型 + 可选 schema）；禁止把 `exec`/`spawn`/任意路径 `fs` 暴露给渲染进程。
+- 用户选择的路径需防 **路径穿越**（`..`、盘符混淆等）。
+
+## 文案与错误
+
+- **界面可见字符串**一律 **vue-i18n** key，禁止在 `.vue` 模板硬编码中英句子（专有名词如 `fp16` 除外）。
+- Sidecar / 主进程向 UI 传递 **错误码 + 参数**；展示文案用 `t('errors.xxx')`，勿把 Python 堆栈直接给用户（开发模式可控制台）。
+
+## 目录速记
+
+- 共享类型：`src/shared/`（`ipc-channels.ts`、`sidecar-protocol.ts`）。
+- 路由：`/dashboard`、`/live`、`/train`、`/assets/faces`、`/assets/models`、`/settings`。

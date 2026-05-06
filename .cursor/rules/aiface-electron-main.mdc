@@ -1,0 +1,25 @@
+---
+description: Electron 主进程与预加载（窗口、IPC、Sidecar、单实例）
+globs: "**/{main,preload}/**/*.ts"
+alwaysApply: false
+---
+
+# 主进程与 Preload
+
+## Preload
+
+- 仅用 `contextBridge.exposeInMainWorld`；API 名称稳定（如 `aiface`），与 `src/shared/window-api.d.ts` 对齐。
+- `invoke(channel, ...args)` 的 `channel` 须与 `src/shared/ipc-channels.ts` 常量一致；勿拼接用户输入作为 channel。
+
+## 主进程
+
+- **单实例**：已使用 `requestSingleInstanceLock`；第二实例应聚焦已有窗口。
+- **Sidecar**：`src/main/sidecar.ts` 负责 `spawn` / 解析 NDJSON / mock 回退；`before-quit` 须 **stop**，释放子进程与显存。
+- **帧通路**：`frame_ready`（协议 v2）由 `src/main/frame-buffer.ts` 读 mmap 文件，再 `webContents.send('aiface:frame-pixels', meta, Buffer)`；勿把大图 Base64 塞进 NDJSON。
+- **预加载路径**：构建产物为 `out/preload/index.mjs`，`BrowserWindow` 的 `preload` 路径需与之匹配。
+- **窗口**：`webPreferences` 禁止开启 `nodeIntegration`；慎用 `remote`。
+- **系统**：`OPEN_LOG_DIR` 等使用 `app.getPath`、`shell.openPath`；日志目录可后续接 `electron-log`。
+
+## IPC 清单（维护）
+
+- 新增通道时同步更新：`ipc-channels.ts`、主进程 `ipcMain.handle`、调用方文档或 Skill `aiface-sidecar-protocol`（若与引擎相关）。

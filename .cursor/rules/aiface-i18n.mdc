@@ -1,0 +1,24 @@
+---
+description: 中英文切换（vue-i18n、AntD locale、Day.js、持久化优先级）
+globs: "**/{locales/**/*.json,i18n/**/*.ts,stores/settings.ts}"
+alwaysApply: false
+---
+
+# 国际化（zh-CN / en）
+
+## 三层同步
+
+1. **vue-i18n**：业务文案，JSON 在 `src/renderer/src/locales/`。
+2. **ant-design-vue**：`a-config-provider :locale`，来自 `settings` store（`zhCN` / `enUS`）。
+3. **Day.js**：`dayjs.locale('zh-cn' | 'en')`，在 `settings` 的 `bootstrapLocale` / `setLocale` 中与上两者同步。
+
+## 持久化优先级
+
+1. **localStorage** `aiface.locale` 已存在 → 启动即用，**不**被系统语言覆盖。
+2. 否则：`app.getLocale()`（IPC `GET_LOCALE_HINT`）→ 再 `navigator.language`；`zh*` → `zh-CN`，否则默认 **`en`**（产品可改为默认 `zh-CN`）。
+3. 切换语言时更新 `document.documentElement.lang`。
+
+## 禁忌
+
+- 模板内硬编码用户可见句子。
+- 仅改 JSON 或仅改 AntD 一侧导致日期/分页语言不一致。
